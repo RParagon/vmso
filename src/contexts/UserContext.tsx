@@ -22,15 +22,11 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-// Função para validar e retornar uma data válida (ou null)
+// Função para validar e retornar uma data ISO ou null se inválida
 const parseDate = (dateStr: string | null | undefined): string | null => {
   if (!dateStr || dateStr.trim() === "") return null;
-  try {
-    const date = new Date(dateStr);
-    return isNaN(date.getTime()) ? null : dateStr;
-  } catch {
-    return null;
-  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d.toISOString();
 };
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
@@ -38,7 +34,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Busca ou cria o perfil do usuário
   const fetchUser = async () => {
     setIsLoading(true);
     try {
@@ -46,14 +41,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         data: { session },
       } = await supabase.auth.getSession();
       if (session?.user) {
-        // Tenta buscar o perfil
+        // Busca o perfil no banco
         let { data, error } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
           .maybeSingle();
 
-        // Se não existir, cria um perfil padrão
+        // Se o perfil não existir, cria um padrão
         if (!data) {
           const defaultProfile = {
             id: session.user.id,
@@ -73,6 +68,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           throw error;
         }
 
+        // Mapeia os dados do banco (snake_case) para o objeto do usuário (camelCase)
         setUser({
           id: session.user.id,
           email: session.user.email || '',
@@ -105,16 +101,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [toast]);
 
-  // Atualiza o perfil (converte camelCase para snake_case)
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       if (!user) throw new Error('Nenhum usuário autenticado');
 
+      // Converte os campos do frontend (camelCase) para snake_case do banco
       const updates = {
         id: user.id,
         full_name: data.fullName !== undefined ? data.fullName : user.fullName,
         phone: data.phone !== undefined ? data.phone : user.phone,
-        role: user.role,
+        role: user.role, // Role não pode ser alterada via frontend
         updated_at: new Date().toISOString(),
       };
 
@@ -140,7 +136,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Faz upload do avatar e atualiza avatar_url
   const uploadAvatar = async (file: File): Promise<string | null> => {
     try {
       if (!user) throw new Error('Nenhum usuário autenticado');
