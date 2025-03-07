@@ -22,11 +22,15 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-// Helper para validar datas
+// Função para validar e retornar uma data válida (ou null)
 const parseDate = (dateStr: string | null | undefined): string | null => {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? null : dateStr;
+  if (!dateStr || dateStr.trim() === "") return null;
+  try {
+    const date = new Date(dateStr);
+    return isNaN(date.getTime()) ? null : dateStr;
+  } catch {
+    return null;
+  }
 };
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
@@ -34,7 +38,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Função para buscar ou criar o perfil do usuário
+  // Busca ou cria o perfil do usuário
   const fetchUser = async () => {
     setIsLoading(true);
     try {
@@ -42,7 +46,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         data: { session },
       } = await supabase.auth.getSession();
       if (session?.user) {
-        // Tenta buscar o perfil do usuário
+        // Tenta buscar o perfil
         let { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -69,7 +73,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           throw error;
         }
 
-        // Mapeia os dados do banco (snake_case) para o objeto do usuário (camelCase)
         setUser({
           id: session.user.id,
           email: session.user.email || '',
@@ -102,16 +105,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [toast]);
 
-  // Atualiza o perfil do usuário
+  // Atualiza o perfil (converte camelCase para snake_case)
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       if (!user) throw new Error('Nenhum usuário autenticado');
-      // Mapeia os campos do frontend para os do banco (snake_case)
+
       const updates = {
         id: user.id,
         full_name: data.fullName !== undefined ? data.fullName : user.fullName,
         phone: data.phone !== undefined ? data.phone : user.phone,
-        role: user.role, // Não permitimos alteração de role via frontend
+        role: user.role,
         updated_at: new Date().toISOString(),
       };
 
@@ -137,7 +140,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Faz upload do avatar e atualiza o campo avatar_url
+  // Faz upload do avatar e atualiza avatar_url
   const uploadAvatar = async (file: File): Promise<string | null> => {
     try {
       if (!user) throw new Error('Nenhum usuário autenticado');
