@@ -9,7 +9,7 @@ interface UserProfile {
   avatar?: string;
   role: 'admin' | 'user' | 'technician';
   phone?: string;
-  lastLogin?: string;
+  lastLogin?: string | null;
 }
 
 interface UserContextType {
@@ -22,12 +22,19 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+// Helper para validar datas
+const parseDate = (dateStr: string | null | undefined): string | null => {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? null : dateStr;
+};
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Função para buscar (ou criar, se necessário) o perfil do usuário
+  // Função para buscar ou criar o perfil do usuário
   const fetchUser = async () => {
     setIsLoading(true);
     try {
@@ -41,16 +48,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('id', session.user.id)
           .maybeSingle();
-        
-        // Se não existir o perfil, cria um registro padrão
+
+        // Se não existir, cria um perfil padrão
         if (!data) {
           const defaultProfile = {
             id: session.user.id,
-            full_name: '', // Valor padrão para full_name
+            full_name: '',
             avatar_url: null,
             role: 'user',
             phone: null,
-            // As colunas created_at e updated_at são gerenciadas pelo banco
           };
           const { data: inserted, error: insertError } = await supabase
             .from('profiles')
@@ -62,7 +68,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } else if (error) {
           throw error;
         }
-        
+
         // Mapeia os dados do banco (snake_case) para o objeto do usuário (camelCase)
         setUser({
           id: session.user.id,
@@ -71,7 +77,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           avatar: data.avatar_url,
           role: data.role || 'user',
           phone: data.phone,
-          lastLogin: session.user.last_sign_in_at,
+          lastLogin: parseDate(session.user.last_sign_in_at),
         });
       }
     } catch (error: any) {
@@ -100,7 +106,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       if (!user) throw new Error('Nenhum usuário autenticado');
-      // Mapeia os campos para snake_case
+      // Mapeia os campos do frontend para os do banco (snake_case)
       const updates = {
         id: user.id,
         full_name: data.fullName !== undefined ? data.fullName : user.fullName,
@@ -117,8 +123,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
-      // Atualiza o estado local mantendo a comunicação com o backend
-      setUser(prev => prev ? { ...prev, ...data } : null);
+      setUser(prev => (prev ? { ...prev, ...data } : null));
       toast({
         title: 'Perfil atualizado',
         description: 'Suas informações foram atualizadas com sucesso.',
@@ -162,7 +167,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       if (updateError) throw updateError;
 
-      setUser(prev => prev ? { ...prev, avatar: avatarUrl } : null);
+      setUser(prev => (prev ? { ...prev, avatar: avatarUrl } : null));
       toast({
         title: 'Avatar atualizado',
         description: 'Sua foto de perfil foi atualizada com sucesso.',
